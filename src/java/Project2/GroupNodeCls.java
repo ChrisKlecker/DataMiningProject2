@@ -100,7 +100,12 @@ public class GroupNodeCls{
         this.MValue = MValue;
     }
 
-    
+    /**
+     * Constructor function for creating a new GroupNode with an adjacency matrix
+     * 
+     * @param Node
+     * @param AdjMatrixSubSet 
+     */
     public GroupNodeCls(String[] Node, RealMatrix AdjMatrixSubSet){
         this.Nodes = Node;
         this.AdjMatrix = AdjMatrixSubSet;
@@ -109,6 +114,13 @@ public class GroupNodeCls{
         CreateEigenInformation();
     }
 
+    /**
+     * Constructor function for creating a new GroupNode with a BMatrix. 
+     * 
+     * @param Node
+     * @param BMatrix
+     * @param BMatrixFlag 
+     */
     public GroupNodeCls(String[] Node, RealMatrix BMatrix, boolean BMatrixFlag){
         this.Nodes = Node;
         this.B_Matrix = BMatrix;
@@ -116,6 +128,12 @@ public class GroupNodeCls{
         CreateEigenInformation();
     }
     
+    /**
+     * Calculates the B Matrix from the Adjacency Matrix. It does by first getting a summation of the adjacency values then adding these
+     * values together to get an M value. We then multiple the summation column matrix and row matrix to get a full matrix called p. We
+     * then calculate our b matrix using our m value and subtracting it from the Adjacency matrix value to finally arrive at our Bmatrix. 
+     * 
+     */
     public void CreateBMatrix(){
         
         ArrayList<Double> SumArrayX = new ArrayList<>();
@@ -124,6 +142,7 @@ public class GroupNodeCls{
         P_Matrix = MatrixUtils.createRealMatrix(AdjMatrix.getColumnDimension(), AdjMatrix.getRowDimension());
         B_Matrix = MatrixUtils.createRealMatrix(AdjMatrix.getColumnDimension(), AdjMatrix.getRowDimension());
         
+        //Calcuate summation of adjacency values for the column
         for(int i=0; i<AdjMatrix.getColumnDimension(); i++){
 
             Double b = 0.0;
@@ -134,6 +153,7 @@ public class GroupNodeCls{
             SumArrayX.add(b);
         }
         
+        //Calcuate summation of adjacency values for the row
         for(int i=0; i<AdjMatrix.getRowDimension(); i++){
 
             Double b = 0.0;
@@ -144,11 +164,13 @@ public class GroupNodeCls{
             SumArrayY.add(b);
         }
         
+        //calculate our m value
         MValue = 0.0;
         for(int i=0; i<SumArrayX.size(); i++){
             MValue += SumArrayX.get(i);
         }
         
+        //Create our P matrix. 
         for(int i=0; i<SumArrayX.size(); i++){
             
             for(int j=0; j<SumArrayY.size(); j++){
@@ -156,6 +178,7 @@ public class GroupNodeCls{
             }
         }
 
+        //Calculate our B Matrix
         for(int i=0; i<SumArrayX.size(); i++){
             
             for(int j=0; j<SumArrayY.size(); j++){
@@ -168,6 +191,11 @@ public class GroupNodeCls{
         }
     } 
     
+    /** 
+     * This creates our Eigen Class object which contains all the Eigen value and vector values we will be using
+     * 
+     * @return 
+     */
     public EigenDecomposition CreateEigenInformation(){
                
         eig = new EigenDecomposition(B_Matrix);
@@ -181,6 +209,11 @@ public class GroupNodeCls{
         return eig;
     }
     
+    /**
+     * Returns the index of the highest positive found eigenvalue
+     * 
+     * @return 
+     */
     public int ReturnHighestEigenValueIndex(){
         double max = Double.MIN_EXPONENT;
         int indexReturn = -1;
@@ -196,6 +229,12 @@ public class GroupNodeCls{
         return indexReturn;  
     }
     
+    /**
+     * Returns an double[] of the EigenVector found at index
+     * 
+     * @param Index
+     * @return 
+     */
     public double[] ReturnEigenVector(int Index){
         List<Double> a = new ArrayList<>();
         
@@ -212,6 +251,14 @@ public class GroupNodeCls{
         return target;
     }
     
+    /**
+     * This generates for me a bitmatrix. Instead of having to compare node values I create a bitmatrix based on the old
+     * nodes and the newly split group nodes. For example, say I have for a split group node ABCDE and my split node group 
+     * contains BDE. Therefore if I send my new nodes BDE to this function it will return 01011. 
+     * 
+     * @param NewNodes
+     * @return 
+     */
     public int[] CreateBitMatrix(ArrayList<String> NewNodes){
         
         int[] ret = new int[Nodes.length];
@@ -222,6 +269,13 @@ public class GroupNodeCls{
         return ret;
     }
 
+    /**
+     * This calculates the z modularity value for the split group
+     * 
+     * @param Matrix1
+     * @param NewNodes
+     * @return 
+     */
     public double CalculateModularityValue(RealMatrix Matrix1, ArrayList<String> NewNodes){
         
         double x = (1 / ((0.5 * MValue) * 4)); //(1/4m) where m = 1/2M from step 1
