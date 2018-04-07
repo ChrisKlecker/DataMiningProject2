@@ -16,23 +16,26 @@ import java.util.List;
  */
 
 //Create an arraylist of matricies. 
-import Jama.Matrix;
-import Jama.EigenvalueDecomposition;
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import javax.faces.context.FacesContext;
-import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
+import org.apache.commons.math3.linear.MatrixUtils;
+import org.apache.commons.math3.linear.RealMatrix;
 
 public class EigenVectoring {
         
     private ArrayList<GroupNodeCls> groupNodeList;
-    private EigenvalueDecomposition eig;
-    private String[] Nodes;
     private GroupNodeCls groupNodeLocal;
+
+    public ArrayList<GroupNodeCls> getGroupNodeList() {
+        return groupNodeList;
+    }
+
+    public void setGroupNodeList(ArrayList<GroupNodeCls> groupNodeList) {
+        this.groupNodeList = groupNodeList;
+    }
 
     public GroupNodeCls getGroupNodeLocal() {
         return groupNodeLocal;
@@ -42,23 +45,26 @@ public class EigenVectoring {
         this.groupNodeLocal = groupNodeLocal;
     }
     
-    public EigenvalueDecomposition getEig() {
-        return eig;
-    }
-
-    public void setEig(EigenvalueDecomposition eig) {
-        this.eig = eig;
-    }
- 
     public EigenVectoring(){
         groupNodeList = new ArrayList<>();
-        
     }
     
-    public void ProcessRequest(HttpServletRequest request) throws FileNotFoundException, IOException{
-       
+    public void ProcessRequest(HttpServletRequest request) throws IOException{
+              
         String realPath = request.getServletContext().getRealPath("/");
         realPath = realPath.concat("\\adjacencyMatrix.csv");
+        
+        GroupNodeCls groupNode = ReadAdjacencyMatrix(realPath);
+        
+        groupNodeList.add(groupNode);
+
+        setGroupNodeLocal(groupNode);
+                        
+        boolean x = SplitIntoGroups(groupNode);
+        int g = 0;
+    }
+    
+    public GroupNodeCls ReadAdjacencyMatrix(String realPath) throws FileNotFoundException, IOException{
         
         BufferedReader br = new BufferedReader(new FileReader(realPath));
         String st;
@@ -81,7 +87,7 @@ public class EigenVectoring {
             }
             count++;
         }
-        
+
         double[][] d = new double[tempArray.size()][tempArray.size()];
         for(int i=0; i<tempArray.size(); i++){
             List<Double> x = tempArray.get(i);
@@ -89,60 +95,120 @@ public class EigenVectoring {
             for(int j=0; j<x.size();j++){
                 d[i][j]= x.get(j);
             }
-        }
+        } 
         
-        GroupNodeCls groupNode = new GroupNodeCls(Nodes, new Matrix(d));        
-        
-        setGroupNodeLocal(groupNode);
-        
-        AddToListAndProcess(groupNode);
+        return new GroupNodeCls(Nodes, MatrixUtils.createRealMatrix(d));
     }
-    
-    public void AddToListAndProcess(GroupNodeCls groupNode){
         
-        groupNodeList.add(groupNode);
-        
-        boolean DoWeSplit = CalculateModularityValue(groupNode);
-        
-        if(DoWeSplit){
-            
-            int index = groupNode.ReturnHighestEigenValueIndex();
-            double[] Vector = groupNode.ReturnEigenVector(index);
-            
-            SplitIntoGroups(Vector, groupNode);
-        }
-        
-        //I split the group into negative and positive. 
-        //We then for each group calculate Z Modulaty. 
-        //If less than zero we don't need split
-        //If positive, then rerun whole process above using subset adjaceny of group. 
-    }
-    
-    public boolean CalculateModularityValue(GroupNodeCls groupNode){
-        
-        //TODO
-        return false;
-    }
-    
-    public void SplitIntoGroups(double[] Vector, GroupNodeCls groupNode){
-        
+    public boolean SplitIntoGroups(GroupNodeCls groupNode){
+             
         ArrayList<String> Group1 = new ArrayList<>();
         ArrayList<String> Group2 = new ArrayList<>();
-        
+
+        double[] Vector = groupNode.ReturnEigenVector(groupNode.ReturnHighestEigenValueIndex());
         for(int i=0; i<Vector.length; i++){
-            
-            if(Vector[i]<0)
+            if(Vector[i] > 0)
                 Group1.add(groupNode.getNodes()[i]);
             else
                 Group2.add(groupNode.getNodes()[i]);
         }
+                
+        if(Group1.size()>0 && Group2.size()>0){
+            
+            RealMatrix Matrix1 = CreateNewGroup(Group1, groupNode);
+            RealMatrix Matrix2 = CreateNewGroup(Group2, groupNode);
+
+            double Z1 = groupNode.CalculateModularityValue(Matrix1, Group1);
+            
+//          GroupNodeCls groupNode1 = new GroupNodeCls(Group1.toArray(new String[Group1.size()]), CreateNewMatrix(Group1, groupNode), true);
+
+            GroupNodeCls groupNode1 = new GroupNodeCls(Group1.toArray(new String[Group1.size()]), CreateNewMatrix(Group1, groupNode)); 
+            groupNode1.setRanks(GetRanks(Group1, groupNode));
+            groupNode1.setZValue(Z1);
+            groupNodeList.add(groupNode1);
+
+            if(Z1 > 0){
+                boolean split = SplitIntoGroups(groupNode1);
+            }
+
+            double Z2 = groupNode.CalculateModularityValue(Matrix2, Group2);
+
+//          GroupNodeCls groupNode1 = new GroupNodeCls(Group1.toArray(new String[Group1.size()]), CreateNewMatrix(Group1, groupNode), true);
+
+            GroupNodeCls groupNode2 = new GroupNodeCls(Group2.toArray(new String[Group2.size()]), CreateNewMatrix(Group2, groupNode));
+            groupNode2.setRanks(GetRanks(Group2, groupNode));
+            groupNode2.setZValue(Z2);
+            groupNodeList.add(groupNode2);
+
+            if(Z2 > 0){
+                boolean split = SplitIntoGroups(groupNode2);
+            }
+        }
         
-        
-        //GroupNodeCls NewGroupNode = new GroupNodeCls(NewNode, new Matrix(newMatrix));        
-        //AddToListAndProcess(NewGroupNode);
-        
-        //GroupNodeCls NewGroupNode2 = new GroupNodeCls(NewNode2, new Matrix(newMatrix2));        
-        //AddToListAndProcess(NewGroupNode2);
+        return true;
     }
-  
+    
+    public double[] GetRanks(ArrayList<String> Group, GroupNodeCls GroupNode){
+        int[] a = GroupNode.CreateBitMatrix(Group);
+        double v[] = GroupNode.ReturnEigenVector(GroupNode.ReturnHighestEigenValueIndex());
+        
+        int sumLength = 0;
+        for(int i=0;i<a.length; i++){
+            if(a[i] == 1)
+                sumLength++;
+        }
+        double d[] = new double[sumLength];
+        for(int i=0, j=0;i<a.length; i++){
+            if(a[i] == 1){
+                d[j++] = v[i];
+            }
+        }
+        
+        return d;
+    }
+    
+    public RealMatrix CreateNewMatrix(ArrayList<String> Group, GroupNodeCls GroupNode){
+        
+        int[] a = GroupNode.CreateBitMatrix(Group);
+        RealMatrix newM = MatrixUtils.createRealMatrix(Group.size(), Group.size());
+        
+        int counti = 0;
+        
+        //Change this to BMatrix to get the BMatrix values
+        
+        for(int i=0; i<GroupNode.getAdjMatrix().getColumnDimension(); i++){
+            
+            if(a[i] == 1){
+                RealMatrix colM = GroupNode.getAdjMatrix().getColumnMatrix(i);
+                double x1[] = new double[Group.size()];
+                for(int j = 0, k = 0; j<colM.getRowDimension(); j++){
+                    if(a[j] == 1)
+                        x1[k++] = colM.getEntry(j, 0);
+                }
+                newM.setColumn(counti++, x1);
+            }
+        }
+        
+        return newM;
+    }
+    
+    public RealMatrix CreateNewGroup(ArrayList<String> NewNodes, GroupNodeCls groupNode){
+       
+        RealMatrix newMatrix = MatrixUtils.createRealMatrix(NewNodes.size(), groupNode.getNodes().length);
+        
+        for(int i=0; i<NewNodes.size(); i++){
+            
+            for(int j=0; j<groupNode.getNodes().length; j++){
+                if(NewNodes.get(i).compareTo(groupNode.getNodes()[j]) == 0){
+                    
+                    newMatrix.setRowMatrix(i, groupNode.getB_Matrix().getRowMatrix(j));
+                    break;
+                }
+            }
+        }        
+
+        return newMatrix;       
+
+    }
+
 }
